@@ -1,0 +1,27 @@
+{
+  Address[
+  addressLines=
+  [
+    0
+    :
+    "대한민국 전라북도 고창군 신림면 벽송리 263-18"
+  ],
+  feature=２６３
+  −
+  １８,
+  admin=전라북도,
+  sub-admin=null,
+  locality=고창군,
+  thoroughfare=null,
+  postalCode=585-830,
+  countryCode=KR,
+  countryName=대한민국,
+  hasLatitude=true,
+  latitude=35.4618757,
+  hasLongitude=true,
+  longitude=126.67340589999999,
+  phone=null,
+  url=null,
+  extras=null
+]
+}
