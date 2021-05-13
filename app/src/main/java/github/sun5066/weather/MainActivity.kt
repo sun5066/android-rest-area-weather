@@ -1,10 +1,9 @@
 package github.sun5066.weather
 
-import android.location.Address
+import android.annotation.SuppressLint
 import android.location.Geocoder
 import android.os.Bundle
 import android.util.Log
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
@@ -12,20 +11,25 @@ import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.gson.Gson
+import io.reactivex.Observable
+import io.reactivex.Single
+import io.reactivex.functions.Consumer
+import io.reactivex.schedulers.Schedulers
 import okhttp3.ResponseBody
+import org.json.JSONObject
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import java.io.IOException
 
-class MainActivity : AppCompatActivity(), OnMapReadyCallback, GoogleMap.OnMapClickListener,
-    GoogleMap.OnMapLongClickListener {
+class MainActivity : AppCompatActivity(), OnMapReadyCallback, GoogleMap.OnMapClickListener {
 
     private lateinit var mMap: GoogleMap
     private lateinit var mGeocoder: Geocoder
-    private lateinit var mRestAreaList: MutableList<Address>
+    private val mRestAreaNameList: MutableList<RestAreaWeather> by lazy { mutableListOf<RestAreaWeather>() }
+    private val mAddressNameList: MutableList<String> by lazy { resources.getStringArray(R.array.area_list).toCollection(ArrayList()) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,12 +43,6 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback, GoogleMap.OnMapCli
         mMap = map!!
         mGeocoder = Geocoder(this)
 
-        try {
-//            mRestAreaList = mGeocoder.getFromLocationName("고창고인돌휴게소", 10)
-//            Log.d("123", "mRestAreaList: $mRestAreaList")
-        } catch (e: IOException) {
-            e.printStackTrace()
-        }
         val seoul = LatLng(37.56, 126.97)
 
         val markerOption = MarkerOptions()
@@ -62,11 +60,6 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback, GoogleMap.OnMapCli
 
     }
 
-    override fun onMapLongClick(p0: LatLng?) {
-
-    }
-
-
     private fun getRestAreaApi() {
         val retrofit = Retrofit.Builder()
             .baseUrl(RestAreaConstants.URL)
@@ -75,17 +68,61 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback, GoogleMap.OnMapCli
 
         val service = retrofit.create(RestAreaService::class.java)
         service
-            .getList("6514009844", "json", "20210501", "10")
+            .getList("6514009844", "json", "20210512", "10")
             .enqueue(object : Callback<ResponseBody> {
+                override fun onFailure(call: Call<ResponseBody>, t: Throwable) {}
 
-                override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
-                    Log.d("123", "실패")
-                }
-
+                @SuppressLint("CheckResult")
                 override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
-                    Log.d("123", "call")
-                    Log.d("123", "response: $response")
+                    Observable.just(response.body()!!.string())
+                        .observeOn(Schedulers.io())
+                        .subscribeOn(Schedulers.single())
+                        .subscribe {
+                            Log.d("123", "it: $it")
+
+                            val json = JSONObject(it)
+                            val list = json.getJSONArray("list")
+
+                            for (i in 0 until list.length()) {
+                                val obj = list[i] as JSONObject
+                                val restAreaWeather =
+                                    Gson().fromJson(obj.toString(), RestAreaWeather::class.java)
+                                mRestAreaNameList.add(restAreaWeather)
+                            }
+
+                            Single.just(mRestAreaNameList)
+                                .subscribeOn(Schedulers.single())
+                                .map { Log.d("123", "Single.map() >> mRestAreaNameList: $mRestAreaNameList") }
+                                .subscribe(Consumer { setMarker() })
+                        }
                 }
             })
     }
+
+    private fun setMarker() {
+        Log.d("123", "setMarker():::")
+
+        runOnUiThread {
+            mRestAreaNameList.forEach {
+                val unitName = it.unitName
+                val weatherContents = it.weatherContents
+
+                Log.d("123", "name: ${it.addrName}")
+                if (unitName.isNotEmpty()) {
+                    val addressList = mGeocoder.getFromLocationName(unitName, 1)
+
+                    addressList.forEach { address ->
+                        val location = LatLng(address.latitude, address.longitude)
+                        MarkerOptions().apply {
+                            position(location)
+                            title(unitName)
+                            snippet(weatherContents)
+                            mMap.addMarker(this)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 }
